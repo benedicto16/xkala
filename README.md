@@ -6,6 +6,13 @@ Desarrollada con **SwiftUI** y **SwiftData**, Xkala permite registrar sesiones d
 
 Actualmente es un proyecto personal para validar el uso real de la app durante sesiones de escalada.
 
+<p align="center">
+  <img src="screenshots/home.png" width="250">
+  <img src="screenshots/workout.png" width="250">
+  <img src="screenshots/addworkout.png" width="250">
+  <img src="screenshots/sets.png" width="250">
+</p>
+
 ## Funcionalidades
 
 - creación de un entrenamiento por día
