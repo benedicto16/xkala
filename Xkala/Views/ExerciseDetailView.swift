@@ -10,10 +10,8 @@ struct ExerciseDetailView: View {
 
     @State private var completionPulse = false
 
-    private let statisticsService = ExerciseStatisticsService()
-
     var body: some View {
-        let stats = statisticsService.calculateProgress(for: entry.exercise, in: workouts)
+        let progressSnapshot = ExerciseProgressCalculator.snapshot(for: entry.exercise, in: workouts)
 
         List {
             if !entry.exercise.notes.isEmpty {
@@ -167,8 +165,7 @@ struct ExerciseDetailView: View {
 
             Section("Progreso") {
                 ExerciseProgressSectionView(
-                    stats: stats,
-                    mode: entry.exercise.modeEnum
+                    snapshot: progressSnapshot
                 )
             }
 
