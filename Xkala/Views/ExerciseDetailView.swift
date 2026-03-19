@@ -6,9 +6,15 @@ struct ExerciseDetailView: View {
     @Environment(\.modelContext) private var context
     @Bindable var entry: WorkoutEntry
 
+    @Query(sort: \WorkoutDay.date, order: .reverse) private var workouts: [WorkoutDay]
+
     @State private var completionPulse = false
 
+    private let statisticsService = ExerciseStatisticsService()
+
     var body: some View {
+        let stats = statisticsService.calculateProgress(for: entry.exercise, in: workouts)
+
         List {
             if !entry.exercise.notes.isEmpty {
                 Section("Cómo se hace") {
@@ -157,6 +163,13 @@ struct ExerciseDetailView: View {
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+
+            Section("Progreso") {
+                ExerciseProgressSectionView(
+                    stats: stats,
+                    mode: entry.exercise.modeEnum
+                )
             }
 
             Section("Notas") {
