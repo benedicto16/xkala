@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Combine
 import UIKit
 
 struct WorkoutDetailView: View {
@@ -7,6 +8,9 @@ struct WorkoutDetailView: View {
     @Bindable var workout: WorkoutDay
 
     @State private var selectedEntry: WorkoutEntry?
+    @State private var now: Date = Date()
+
+    private let durationTick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         List {
@@ -19,6 +23,8 @@ struct WorkoutDetailView: View {
                         selection: $workout.date,
                         displayedComponents: [.date, .hourAndMinute]
                     )
+
+                    timerControlsCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .xkalaCard()
@@ -99,13 +105,17 @@ struct WorkoutDetailView: View {
                 }
             }
         }
+        .onReceive(durationTick) { _ in
+            // Solo refrescamos si está en curso.
+            guard workout.startedAt != nil, workout.endedAt == nil else { return }
+            now = Date()
+        }
     }
 
     private var navigationTitle: String {
         let trimmed = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty
-            ? workout.date.formatted(date: .abbreviated, time: .shortened)
-            : trimmed
+        if !trimmed.isEmpty { return trimmed }
+        return workout.categoriesBasedName ?? workout.date.formatted(date: .abbreviated, time: .shortened)
     }
 
     private func deleteEntry(_ entry: WorkoutEntry) {
@@ -115,6 +125,76 @@ struct WorkoutDetailView: View {
         }
         context.delete(entry)
         try? context.save()
+    }
+
+    // MARK: - Timer controls
+
+    private var timerControlsCard: some View {
+        VStack(spacing: 10) {
+            if workout.startedAt == nil {
+                Button {
+                    let started = Date()
+                    workout.startedAt = started
+                    workout.endedAt = nil
+                    now = started
+                    try? context.save()
+                } label: {
+                    XkalaActionButton(
+                        title: "Iniciar entrenamiento",
+                        systemImage: "play.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+            } else if workout.endedAt == nil {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Duración en curso")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    if let durationText {
+                        Text(durationText)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                }
+
+                Button {
+                    workout.endedAt = Date()
+                    now = Date()
+                    try? context.save()
+                } label: {
+                    XkalaActionButton(
+                        title: "Finalizar entrenamiento",
+                        systemImage: "stop.fill"
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                if let durationText {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Duración")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Text(durationText)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var durationText: String? {
+        guard let startedAt = workout.startedAt else { return nil }
+
+        let seconds: TimeInterval
+        if let endedAt = workout.endedAt {
+            seconds = endedAt.timeIntervalSince(startedAt)
+        } else {
+            seconds = now.timeIntervalSince(startedAt)
+        }
+
+        return DurationFormatting.formatSpanish(duration: seconds)
     }
 }
 
@@ -130,13 +210,36 @@ private struct EntryCardContent: View {
                 .font(.system(size: 22))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(entry.exercise.name)
-                    .font(.headline)
+                if entry.isBlock {
+                    HStack(spacing: 10) {
+                        gradeDot
+                        Text(blockTitle)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                    }
+                } else if entry.isTraverse {
+                    HStack(spacing: 6) {
+                        Text("Travesía")
+                            .font(.headline)
+                        Text(traverseIdentifier)
+                            .font(.system(.headline, design: .monospaced))
+                    }
                     .foregroundStyle(.primary)
+                } else {
+                    Text(entry.exercise.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                }
 
-                Text("\(entry.exercise.category) · Intensidad \(entry.intensity) · Series \(entry.sets.count)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                if entry.isBlock || entry.isTraverse {
+                    Text("\(attemptsText) · \(statusText)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("\(entry.exercise.category) · Intensidad \(entry.intensity) · Series \(entry.sets.count)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
@@ -144,6 +247,59 @@ private struct EntryCardContent: View {
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary.opacity(0.7))
+        }
+    }
+
+    private var attemptsText: String {
+        let attempts = entry.sets.first?.reps ?? 0
+        return "\(attempts) intentos"
+    }
+
+    private var statusText: String {
+        entry.isDone ? "Completado" : "Pendiente"
+    }
+
+    private var blockTitle: String {
+        // climbIdentifier admite número o texto libre: lo mostramos literalmente.
+        let id = (entry.climbIdentifier ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = id.isEmpty ? "—" : id
+        return "Bloque \(shown)"
+    }
+
+    private var traverseIdentifier: String {
+        let id = (entry.climbIdentifier ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = id.isEmpty ? "—" : id.uppercased()
+        return shown
+    }
+
+    private var gradeDot: some View {
+        let color = gradeColor(entry.climbGradeColor)
+        return Circle()
+            .fill(color)
+            .frame(width: 14, height: 14)
+            .overlay {
+                Circle()
+                    .stroke(Color.primary.opacity(0.22), lineWidth: 1)
+            }
+    }
+
+    private func gradeColor(_ grade: String?) -> Color {
+        let normalized = grade?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch normalized {
+        case "green":
+            return .green
+        case "yellow":
+            return .yellow
+        case "orange":
+            return .orange
+        case "purple":
+            return .purple
+        default:
+            return .secondary
         }
     }
 }

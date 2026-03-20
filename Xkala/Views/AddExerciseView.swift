@@ -202,7 +202,14 @@ struct AddExerciseView: View {
         }
         .onAppear {
             if exercises.isEmpty && !isImporting {
-                Task { await seedExercisesIfNeeded() }
+                Task {
+                    await seedExercisesIfNeeded()
+                    await BaseExercisesSeeder.ensureBaseExercisesExist(context: context)
+                }
+            } else {
+                Task {
+                    await BaseExercisesSeeder.ensureBaseExercisesExist(context: context)
+                }
             }
         }
     }

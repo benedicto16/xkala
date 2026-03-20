@@ -63,12 +63,14 @@ struct ExerciseDetailView: View {
                         }
                     }
 
-                    IntControlRow(
-                        title: "Intensidad",
-                        value: $entry.intensity,
-                        range: 1...3,
-                        step: 1
-                    )
+                    if !entry.isBlock && !entry.isTraverse {
+                        IntControlRow(
+                            title: "Intensidad",
+                            value: $entry.intensity,
+                            range: 1...3,
+                            step: 1
+                        )
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .xkalaCard()
@@ -79,80 +81,86 @@ struct ExerciseDetailView: View {
 
             Section("Registro") {
                 VStack(spacing: 12) {
-                    if entry.sets.isEmpty {
-                        Text("Creando registro…")
-                            .foregroundStyle(.secondary)
-                            .onAppear { ensureAtLeastOneSet() }
-                    }
-
-                    if isVuelta {
-                        IntControlRow(
-                            title: "Nº vueltas",
-                            value: Binding(
-                                get: { entry.sets.first?.reps ?? 2 },
-                                set: { newValue in
-                                    ensureSingleSetForVuelta()
-                                    entry.sets.first?.reps = newValue
-                                    entry.sets.first?.seconds = nil
-                                    entry.sets.first?.loadKg = nil
-                                }
-                            ),
-                            range: 0...20,
-                            step: 1
-                        )
+                    if entry.isBlock {
+                        BlockEntryEditorView(entry: entry)
+                    } else if entry.isTraverse {
+                        TraverseEntryEditorView(entry: entry)
                     } else {
-                        IntControlRow(
-                            title: "Series",
-                            value: Binding(
-                                get: { max(entry.sets.count, 1) },
-                                set: { newCount in
-                                    resizeSets(to: max(newCount, 1))
-                                }
-                            ),
-                            range: 1...30,
-                            step: 1
-                        )
+                        if entry.sets.isEmpty {
+                            Text("Creando registro…")
+                                .foregroundStyle(.secondary)
+                                .onAppear { ensureAtLeastOneSet() }
+                        }
 
-                        if entry.exercise.modeEnum == .reps {
+                        if isVuelta {
                             IntControlRow(
-                                title: repsTitle,
+                                title: "Nº vueltas",
                                 value: Binding(
-                                    get: { entry.sets.first?.reps ?? 0 },
+                                    get: { entry.sets.first?.reps ?? 2 },
                                     set: { newValue in
-                                        applyRepsToAll(newValue)
+                                        ensureSingleSetForVuelta()
+                                        entry.sets.first?.reps = newValue
+                                        entry.sets.first?.seconds = nil
+                                        entry.sets.first?.loadKg = nil
                                     }
                                 ),
-                                range: 0...200,
+                                range: 0...20,
                                 step: 1
                             )
                         } else {
-                            TimeControlRow(
-                                title: "Tiempo",
-                                seconds: Binding(
-                                    get: { entry.sets.first?.seconds ?? 0 },
-                                    set: { newValue in
-                                        applySecondsToAll(newValue)
-                                    }
-                                ),
-                                range: 0...3600,
-                                stepSeconds: 5
-                            )
-                        }
-
-                        if entry.exercise.loadAllowed {
-                            DoubleControlRow(
-                                title: "Carga",
-                                suffix: "kg",
+                            IntControlRow(
+                                title: "Series",
                                 value: Binding(
-                                    get: { entry.sets.first?.loadKg ?? 0 },
-                                    set: { newValue in
-                                        applyLoadToAll(newValue)
+                                    get: { max(entry.sets.count, 1) },
+                                    set: { newCount in
+                                        resizeSets(to: max(newCount, 1))
                                     }
                                 ),
-                                range: -50...150,
-                                step: 0.5,
-                                decimals: 1
+                                range: 1...30,
+                                step: 1
                             )
+
+                            if entry.exercise.modeEnum == .reps {
+                                IntControlRow(
+                                    title: repsTitle,
+                                    value: Binding(
+                                        get: { entry.sets.first?.reps ?? 0 },
+                                        set: { newValue in
+                                            applyRepsToAll(newValue)
+                                        }
+                                    ),
+                                    range: 0...200,
+                                    step: 1
+                                )
+                            } else {
+                                TimeControlRow(
+                                    title: "Tiempo",
+                                    seconds: Binding(
+                                        get: { entry.sets.first?.seconds ?? 0 },
+                                        set: { newValue in
+                                            applySecondsToAll(newValue)
+                                        }
+                                    ),
+                                    range: 0...3600,
+                                    stepSeconds: 5
+                                )
+                            }
+
+                            if entry.exercise.loadAllowed {
+                                DoubleControlRow(
+                                    title: "Carga",
+                                    suffix: "kg",
+                                    value: Binding(
+                                        get: { entry.sets.first?.loadKg ?? 0 },
+                                        set: { newValue in
+                                            applyLoadToAll(newValue)
+                                        }
+                                    ),
+                                    range: -50...150,
+                                    step: 0.5,
+                                    decimals: 1
+                                )
+                            }
                         }
                     }
                 }
@@ -191,6 +199,9 @@ struct ExerciseDetailView: View {
         .onAppear {
             ensureAtLeastOneSet()
             normalizeSetsToExerciseRules()
+            if entry.isBlock || entry.isTraverse {
+                ensureSingleSetForClimb()
+            }
             if isVuelta { ensureSingleSetForVuelta() }
         }
         .onChange(of: entry.isDone) { _, newValue in
@@ -240,6 +251,22 @@ struct ExerciseDetailView: View {
         }
     }
 
+    private func ensureSingleSetForClimb() {
+        ensureAtLeastOneSet()
+
+        while entry.sets.count > 1 {
+            if let last = entry.sets.last {
+                context.delete(last)
+                entry.sets.removeLast()
+            } else {
+                break
+            }
+        }
+
+        entry.sets.first?.seconds = nil
+        entry.sets.first?.loadKg = nil
+    }
+
     // MARK: - Texto
 
     private var repsTitle: String {
@@ -249,6 +276,131 @@ struct ExerciseDetailView: View {
             return "Repeticiones"
         }
         return "Reps"
+    }
+
+    // MARK: - Bloques / Travesías editors
+
+    private struct BlockEntryEditorView: View {
+        @Bindable var entry: WorkoutEntry
+
+        private var attemptsBinding: Binding<Int> {
+            Binding(
+                get: { entry.sets.first?.reps ?? 0 },
+                set: { newValue in
+                    if entry.sets.isEmpty { entry.sets.append(SetRecord.make(for: entry.exercise)) }
+                    entry.sets.first?.reps = newValue
+                    entry.sets.first?.seconds = nil
+                    entry.sets.first?.loadKg = nil
+                }
+            )
+        }
+
+        private var identifierBinding: Binding<String> {
+            Binding(
+                get: { entry.climbIdentifier ?? "" },
+                set: { newValue in
+                    let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    entry.climbIdentifier = trimmed.isEmpty ? nil : trimmed
+                }
+            )
+        }
+
+        private let gradeOptions: [(String, Color)] = [
+            ("green", .green),
+            ("yellow", .yellow),
+            ("orange", .orange),
+            ("purple", .purple)
+        ]
+
+        var body: some View {
+            VStack(spacing: 12) {
+                TextField("Identificador", text: identifierBinding)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled(true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 14) {
+                    ForEach(gradeOptions.indices, id: \.self) { idx in
+                        let option = gradeOptions[idx]
+                        let isSelected = entry.climbGradeColor == option.0
+                        Button {
+                            entry.climbGradeColor = option.0
+                        } label: {
+                            Circle()
+                                .fill(option.1)
+                                .frame(width: 22, height: 22)
+                                .overlay {
+                                    if isSelected {
+                                        Circle().stroke(Color.primary, lineWidth: 2)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                IntControlRow(
+                    title: "Intentos",
+                    value: attemptsBinding,
+                    range: 0...200,
+                    step: 1
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private struct TraverseEntryEditorView: View {
+        @Bindable var entry: WorkoutEntry
+
+        private var attemptsBinding: Binding<Int> {
+            Binding(
+                get: { entry.sets.first?.reps ?? 0 },
+                set: { newValue in
+                    if entry.sets.isEmpty { entry.sets.append(SetRecord.make(for: entry.exercise)) }
+                    entry.sets.first?.reps = newValue
+                    entry.sets.first?.seconds = nil
+                    entry.sets.first?.loadKg = nil
+                }
+            )
+        }
+
+        private var identifierBinding: Binding<String> {
+            Binding(
+                get: { entry.climbIdentifier ?? "" },
+                set: { newValue in
+                    let upper = newValue.uppercased()
+                    let firstLetter = upper.unicodeScalars.first(where: { scalar in
+                        let v = scalar.value
+                        return v >= 65 && v <= 90 // A-Z
+                    })
+
+                    if let firstLetter {
+                        entry.climbIdentifier = String(UnicodeScalar(firstLetter.value)!)
+                    } else {
+                        entry.climbIdentifier = nil
+                    }
+                }
+            )
+        }
+
+        var body: some View {
+            VStack(spacing: 12) {
+                TextField("Letra", text: identifierBinding)
+                    .keyboardType(.alphabet)
+                    .autocorrectionDisabled(true)
+                    .textInputAutocapitalization(.characters)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                IntControlRow(
+                    title: "Intentos",
+                    value: attemptsBinding,
+                    range: 0...200,
+                    step: 1
+                )
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     // MARK: - Lógica de sets (uniforme)

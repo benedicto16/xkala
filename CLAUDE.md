@@ -60,6 +60,9 @@ WorkoutEntry
 - intensity: Int
 - isDone: Bool
 - entryNotes: String
+- climbKind: String?        // "block" | "traverse"
+- climbIdentifier: String?  // bloque: número o texto libre; travesía: A–Z
+- climbGradeColor: String?  // solo bloque: "green" | "yellow" | "orange" | "purple"
 - sets: [SetRecord]
 
 SetRecord
@@ -95,6 +98,17 @@ REGLAS IMPORTANTES DE DOMINIO
 - No mezclar progreso real con datos vacíos o placeholders sin justificarlo.
 - Si una métrica depende de datos ambiguos, priorizar interpretación conservadora.
 
+- Bloques y Travesías se modelan como ejercicios plantilla, no como Exercise independientes por instancia.
+- Los ejercicios base son "Bloque" y "Travesía".
+- 1 WorkoutEntry = 1 bloque real o 1 travesía real.
+- En Bloque y Travesía, el completado se guarda en WorkoutEntry.isDone.
+- En Bloque y Travesía, los intentos se guardan en SetRecord.reps usando un único SetRecord.
+- En Bloque, climbIdentifier admite número o texto libre.
+- En Travesía, climbIdentifier debe ser una única letra A–Z.
+- En Bloque, climbGradeColor solo puede ser: "green", "yellow", "orange", "purple".
+- No reutilizar intensity para representar el grado/color de Bloque.
+- No usar entryNotes como fuente principal de datos estructurados de Bloques/Travesías.
+
 REGLAS IMPORTANTES DE ARQUITECTURA
 
 - No cambiar el modelo SwiftData sin justificación clara.
@@ -118,6 +132,10 @@ RIESGOS CLAVE A VIGILAR
 - Cálculos de progreso hechos dentro de vistas de forma poco reutilizable.
 - Mezclar edición de entreno con análisis histórico sin estructura clara.
 
+- Crear múltiples Exercise para bloques o travesías concretos en lugar de usar ejercicios plantilla.
+- Mezclar la semántica de intensity con el grado/color de Bloque.
+- Exponer editor genérico de sets en Bloques/Travesías y terminar persistiendo múltiples sets innecesarios.
+
 FLUJO DE PANTALLAS ACTUAL
 
 ContentView
@@ -140,6 +158,11 @@ ExerciseDetailView
 → Step +/- tiempo = 5s
 → Botón OK global en toolbar teclado
 → Actualmente ya puede mostrar progreso básico del ejercicio
+→ Para "Bloque" y "Travesía" usa editor específico:
+   - sin intensidad
+   - sin editor de sets
+   - Bloque: identificador, color, intentos, completado
+   - Travesía: identificador A–Z, intentos, completado
 
 DECISIONES UX IMPORTANTES
 

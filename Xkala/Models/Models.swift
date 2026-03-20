@@ -10,6 +10,14 @@ final class WorkoutDay {
     /// Permite múltiples sesiones el mismo día.
     var date: Date
 
+    /// Fecha/hora real de inicio del entrenamiento (timer persistente).
+    /// Si está en curso: `startedAt != nil && endedAt == nil`.
+    var startedAt: Date?
+
+    /// Fecha/hora real de finalización del entrenamiento (timer persistente).
+    /// Si está finalizado: `startedAt != nil && endedAt != nil`.
+    var endedAt: Date?
+
     /// Nombre editable para diferenciar entrenamientos.
     /// Default vacío para evitar problemas de migración.
     var name: String = ""
@@ -25,12 +33,16 @@ final class WorkoutDay {
         date: Date = Date(),
         name: String = "",
         notes: String = "",
-        entries: [WorkoutEntry] = []
+        entries: [WorkoutEntry] = [],
+        startedAt: Date? = nil,
+        endedAt: Date? = nil
     ) {
         self.date = date
         self.name = name
         self.notes = notes
         self.entries = entries
+        self.startedAt = startedAt
+        self.endedAt = endedAt
     }
 
     /// Clave de día (inicio del día) útil para agrupar en estadísticas futuras.
@@ -85,6 +97,12 @@ final class WorkoutEntry {
     var isDone: Bool
     var entryNotes: String
 
+    // MARK: - Bloques y Travesías (fase base)
+    // Opcionales para no romper persistencia existente.
+    var climbKind: String?
+    var climbIdentifier: String?
+    var climbGradeColor: String?
+
     @Relationship(deleteRule: .cascade)
     var sets: [SetRecord]
 
@@ -93,13 +111,74 @@ final class WorkoutEntry {
         intensity: Int = 1,
         isDone: Bool = false,
         entryNotes: String = "",
-        sets: [SetRecord] = []
+        sets: [SetRecord] = [],
+        climbKind: String? = nil,
+        climbIdentifier: String? = nil,
+        climbGradeColor: String? = nil
     ) {
         self.exercise = exercise
         self.intensity = intensity
         self.isDone = isDone
         self.entryNotes = entryNotes
         self.sets = sets
+        self.climbKind = climbKind
+        self.climbIdentifier = climbIdentifier
+        self.climbGradeColor = climbGradeColor
+    }
+}
+
+extension WorkoutEntry {
+    /// Helpers simples para identificar Bloques/Travesías sin tocar lógica de UI.
+    var isBlock: Bool {
+        if let kind = climbKindNormalized, kind == "block" { return true }
+        return exerciseNameNormalized == "bloque"
+    }
+
+    var isTraverse: Bool {
+        if let kind = climbKindNormalized, kind == "traverse" { return true }
+        return exerciseNameNormalized == "travesia"
+    }
+
+    private var climbKindNormalized: String? {
+        climbKind?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private var exerciseNameNormalized: String {
+        exercise.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .folding(options: .diacriticInsensitive, locale: .current)
+    }
+}
+
+// MARK: - WorkoutDay display naming (sin tocar persistencia)
+extension WorkoutDay {
+    /// Nombre alternativo para la UI cuando `name` está vacío.
+    /// Genera un string a partir de categorías únicas presentes en `entries`.
+    ///
+    /// Regla:
+    /// - Unique: categorías únicas de `entry.exercise.category`
+    /// - Orden: alfabético
+    /// - Join: " · "
+    /// - Si no hay categorías válidas: devuelve `nil` (para que la UI use su fallback discreto).
+    var categoriesBasedName: String? {
+        let categories = Set(
+            entries.compactMap { entry in
+                let trimmed = entry.exercise.category
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        )
+
+        guard !categories.isEmpty else { return nil }
+
+        let sorted = categories.sorted { a, b in
+            a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+        }
+
+        return sorted.joined(separator: " · ")
     }
 }
 
